@@ -2,7 +2,7 @@ using System;
 
 namespace zeldagen.post30
 {
-    public class Post30Grammar : IMapGrammar
+    public class Post30Grammar : IMapGrammar<TemplateType, RoomType>
     {
         private readonly Random rng = new Random();
 
@@ -13,9 +13,11 @@ namespace zeldagen.post30
 
         public int MaxLinearSequenceLength { get; set; } = 8;
 
-        public Map GenerateMap()
+        public IRoomClassifier<RoomType> Classifier => new Post30Classifier();
+
+        public Map<TemplateType, RoomType> GenerateMap()
         {
-            Map map = new Map();
+            var map = new Map<TemplateType, RoomType>(TemplateType.DungeonStart);
 
             int tick = 0;
             bool firstLayout = true;
@@ -101,7 +103,7 @@ namespace zeldagen.post30
             return map;
         }
 
-        private void SetUpEntrance(Map map, ref int tick, Template next)
+        private void SetUpEntrance(Map<TemplateType, RoomType> map, ref int tick, Template<TemplateType> next)
         {
             if (Roll() <= 15) // was 10
             {
@@ -112,9 +114,9 @@ namespace zeldagen.post30
                 tick++;
                 // e - L - R - L - ()
                 // () - E /
-                Template backL = map.CreateTemplate(TemplateType.LayoutChooser);
-                Template r = map.CreateTemplate(TemplateType.RoomChooser);
-                Template frontL = map.CreateTemplate(TemplateType.LayoutChooser);
+                Template<TemplateType> backL = map.CreateTemplate(TemplateType.LayoutChooser);
+                Template<TemplateType> r = map.CreateTemplate(TemplateType.RoomChooser);
+                Template<TemplateType> frontL = map.CreateTemplate(TemplateType.LayoutChooser);
 
                 //Splice the back L in at the right side of E, then build up e - L - R chain
                 next.SwapRight(backL);
@@ -127,7 +129,7 @@ namespace zeldagen.post30
             }
         }
 
-        private void AddSwitchLockedPath(Map map, ref int tick, Template next)
+        private void AddSwitchLockedPath(Map<TemplateType, RoomType> map, ref int tick, Template<TemplateType> next)
         {
             if (Roll() <= 10)
             {
@@ -157,7 +159,7 @@ namespace zeldagen.post30
             }
         }
 
-        private void AddSwitch(Map map, ref int tick, Template next)
+        private void AddSwitch(Map<TemplateType, RoomType> map, ref int tick, Template<TemplateType> next)
         {
             if (Roll() <= 10)
             {
@@ -171,8 +173,8 @@ namespace zeldagen.post30
                 tick++;
                 // R - L - switch
                 //   \ SW
-                Template r = map.CreateTemplate(TemplateType.RoomChooser);
-                Template l = map.CreateTemplate(TemplateType.LayoutChooser);
+                Template<TemplateType> r = map.CreateTemplate(TemplateType.RoomChooser);
+                Template<TemplateType> l = map.CreateTemplate(TemplateType.LayoutChooser);
 
                 next.SwapLeft(r);
                 r.Connect(next);
@@ -183,7 +185,7 @@ namespace zeldagen.post30
             }
         }
 
-        private void AddSwitchedSection(Map map, Template next)
+        private void AddSwitchedSection(Map<TemplateType, RoomType> map, Template<TemplateType> next)
         {
             int state = map.Switch();
 
@@ -204,7 +206,7 @@ namespace zeldagen.post30
             }
         }
 
-        private void AddLockChain(Map map, ref int tick, Template next)
+        private void AddLockChain(Map<TemplateType, RoomType> map, ref int tick, Template<TemplateType> next)
         {
             if (Roll() <= 10)
             {
@@ -239,7 +241,7 @@ namespace zeldagen.post30
             }
         }
 
-        private void CreateHook(Map map, Template next)
+        private void CreateHook(Map<TemplateType, RoomType> map, Template<TemplateType> next)
         {
             var r = map.CreateTemplate(TemplateType.RoomChooser);
             map.Replace(next, r);
@@ -249,7 +251,7 @@ namespace zeldagen.post30
             r.Connect(gb).Secret = (Roll() > 10);
         }
 
-        private void ChooseLayout(Map map, ref int tick, bool firstLayout, Template next)
+        private void ChooseLayout(Map<TemplateType, RoomType> map, ref int tick, bool firstLayout, Template<TemplateType> next)
         {
             int roll = Roll();
             if (firstLayout)

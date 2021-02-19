@@ -4,19 +4,19 @@ using System.Linq;
 
 namespace zeldagen
 {
-    public class Map
+    public class Map<T, R>
     {
         private int key = 1;
         private int state = 1;
 
-        public Map()
+        public Map(T initial)
         {
-            CreateTemplate(TemplateType.DungeonStart);
+            CreateTemplate(initial);
         }
 
-        public List<Room> Rooms { get; } = new List<Room>();
+        public List<Room<R>> Rooms { get; } = new List<Room<R>>();
 
-        public Queue<Template> Unfinished { get; } = new Queue<Template>();
+        public Queue<Template<T>> Unfinished { get; } = new Queue<Template<T>>();
 
         public IEnumerable<Hall> Halls => Rooms.SelectMany(r => r.Exit);
 
@@ -24,16 +24,16 @@ namespace zeldagen
 
         public int Switch() => state++;
 
-        public Room CreateRoom(RoomType type, int keySwitch = 0)
+        public Room<R> CreateRoom(R type, int keySwitch = 0)
         {
-            Room r = new Room(type, keySwitch);
+            Room<R> r = new Room<R>(type, keySwitch);
             Rooms.Add(r);
             return r;
         }
 
-        public Template CreateTemplate(TemplateType type, int state = 0)
+        public Template<T> CreateTemplate(T type, int state = 0)
         {
-            Template t = new Template(type, state);
+            Template<T> t = new Template<T>(type, state);
             Unfinished.Enqueue(t);
             return t;
         }
@@ -51,9 +51,9 @@ namespace zeldagen
 
             foreach (var hall in halls)
             {
-                Room left = (Room)hall.From;
-                Room right = (Room)hall.To;
-                if (left.Kind == right.Kind && left.Exit.Count == 1 && right.Entrance.Count == 1)
+                Room<R> left = (Room<R>)hall.From;
+                Room<R> right = (Room<R>)hall.To;
+                if (left.Kind.Equals(right.Kind) && left.Exit.Count == 1 && right.Entrance.Count == 1)
                 {
                     Console.WriteLine($"Merging room {right} into {left}");
                     //combine rooms:

@@ -4,25 +4,36 @@ namespace zeldagen
 {
     public interface IMapDisplay
     {
-        void Print(Map map);
+        void Print<T, R>(Map<T, R> map, IRoomClassifier<R> classifier);
+    }
+
+    public enum RoomCategory
+    {
+        Entrance,
+        Goal,
+        Normal
+    }
+
+    public interface IRoomClassifier<R>
+    {
+        RoomCategory Classify(Room<R> room);
     }
 
     public class GraphvizMapDisplay : IMapDisplay
     {
-        public void Print(Map map)
+        public void Print<T, R>(Map<T, R> map, IRoomClassifier<R> classifier)
         {
             Console.WriteLine("strict digraph dungeon {");
 
             // add rooms
             foreach (var room in map.Rooms)
             {
-                switch (room.Kind)
+                switch (classifier.Classify(room))
                 {
-                    case RoomType.Entrance:
+                    case RoomCategory.Entrance:
                         Console.WriteLine($"{room.Id} [label=\"{room.ToString()}\",shape=point]");
                         break;
-                    case RoomType.Goal:
-                    case RoomType.BonusGoal:
+                    case RoomCategory.Goal:
                         Console.WriteLine($"{room.Id} [label=\"{room.ToString()}\",peripheries=2]");
                         break;
                     default:
@@ -38,21 +49,21 @@ namespace zeldagen
                 {
                     case Direction.Both:
                         if (label is null)
-                            Console.WriteLine($"{((Room)hall.From).Id} -> {((Room)hall.To).Id} [dir=both]");
+                            Console.WriteLine($"{hall.From.Id} -> {hall.To.Id} [dir=both]");
                         else
-                            Console.WriteLine($"{((Room)hall.From).Id} -> {((Room)hall.To).Id} [dir=both,{label}]");
+                            Console.WriteLine($"{hall.From.Id} -> {hall.To.Id} [dir=both,{label}]");
                         break;
                     case Direction.Forward:
                         if (label is null)
-                            Console.WriteLine($"{((Room)hall.From).Id} -> {((Room)hall.To).Id}");
+                            Console.WriteLine($"{hall.From.Id} -> {hall.To.Id}");
                         else
-                            Console.WriteLine($"{((Room)hall.From).Id} -> {((Room)hall.To).Id} [{label}]");
+                            Console.WriteLine($"{hall.From.Id} -> {hall.To.Id} [{label}]");
                         break;
                     case Direction.Back:
                         if (label is null)
-                            Console.WriteLine($"{((Room)hall.To).Id} -> {((Room)hall.From).Id}");
+                            Console.WriteLine($"{hall.To.Id} -> {hall.From.Id}");
                         else
-                            Console.WriteLine($"{((Room)hall.To).Id} -> {((Room)hall.From).Id} [{label}]");
+                            Console.WriteLine($"{hall.To.Id} -> {hall.From.Id} [{label}]");
                         break;
                 }
             }

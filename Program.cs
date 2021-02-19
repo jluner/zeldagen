@@ -6,7 +6,7 @@ namespace zeldagen
     {
         static void Main(string[] args)
         {
-            IMapGrammar grammar = new post30.Post30Grammar();
+            var grammar = new post30.Post30Grammar();
 
             Console.WriteLine("Generating map...");
             var map = grammar.GenerateMap();
@@ -17,7 +17,7 @@ namespace zeldagen
             Console.WriteLine("Completed map of {0} rooms", map.Rooms.Count);
 
             //graphviz output
-            new GraphvizMapDisplay().Print(map);
+            new GraphvizMapDisplay().Print(map, grammar.Classifier);
         }
     }
 }

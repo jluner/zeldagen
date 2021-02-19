@@ -4,8 +4,14 @@ namespace zeldagen
 {
     public class Layout
     {
+        public int Id { get; }
         public HashSet<Hall> Entrance { get; } = new HashSet<Hall>();
         public HashSet<Hall> Exit { get; } = new HashSet<Hall>();
+
+        public Layout(int id)
+        {
+            Id = id;
+        }
 
         public Hall Connect(Layout right, Direction dir = Direction.Both)
         {
@@ -28,32 +34,5 @@ namespace zeldagen
             @new.Exit.AddRange(this.Exit);
             this.Exit.Clear();
         }
-    }
-
-    public enum TemplateType
-    {
-        DungeonStart,
-        EntranceChain,
-        LayoutChooser,
-        RoomChooser,
-        HookSequence,
-        LockChain,
-        MultiSwitch,
-        LinearSequence,
-        BonusGoal,
-        SwitchSeq,
-        SwitchLockSeq
-    }
-
-    public class Template : Layout
-    {
-        public Template(TemplateType type, int state)
-        {
-            Type = type;
-            State = state;
-        }
-
-        public TemplateType Type { get; }
-        public int State { get; set; }
     }
 }

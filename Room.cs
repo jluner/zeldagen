@@ -1,33 +1,19 @@
 namespace zeldagen
 {
-    public enum RoomType
-    {
-        Entrance,
-        Goal,
-        BonusGoal,
-        Empty,
-        Monster,
-        Challenge,
-        Trap,
-        Puzzle,
-        Key,
-        Switch
-    }
 
-    public class Room : Layout
+    public class Room<T> : Layout
     {
         private static int _counter;
-        public Room(RoomType kind, int keySwitch)
+        
+        public Room(T kind, int keySwitch) : base(_counter++)
         {
             Kind = kind;
             KeySwitch = keySwitch;
-            Id = _counter++;
         }
-        public RoomType Kind { get; }
+
+        public T Kind { get; }
 
         public int KeySwitch { get; }
-
-        public int Id { get; }
 
         public override string ToString() => KeySwitch == 0 ? $"{Kind} ({Id})" : $"{Kind} [{KeySwitch}] ({Id})";
     }

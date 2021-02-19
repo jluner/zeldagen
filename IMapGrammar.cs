@@ -1,7 +1,9 @@
 namespace zeldagen
 {
-    public interface IMapGrammar
+    public interface IMapGrammar<T, R>
     {
-        Map GenerateMap();
+        Map<T, R> GenerateMap();
+
+        IRoomClassifier<R> Classifier { get; }
     }
 }
