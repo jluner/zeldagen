@@ -13,7 +13,7 @@ namespace zeldagen
             Id = id;
         }
 
-        public Hall Connect(Layout right, Direction dir = Direction.Both)
+        public Hall ConnectTo(Layout right, Direction dir = Direction.Both)
         {
             var hall = new Hall { From = this, To = right, Direction = dir };
             this.Exit.Add(hall);
@@ -33,6 +33,13 @@ namespace zeldagen
             foreach (var hall in this.Exit) hall.From = @new;
             @new.Exit.AddRange(this.Exit);
             this.Exit.Clear();
+        }
+
+        public Layout ReplaceWith(Layout @new)
+        {
+            SwapLeft(@new);
+            SwapRight(@new);
+            return @new;
         }
     }
 }

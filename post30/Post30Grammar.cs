@@ -2,7 +2,7 @@ using System;
 
 namespace zeldagen.post30
 {
-    public class Post30Grammar : IMapGrammar<TemplateType, RoomType>
+    public class Post30Grammar : IMapGrammar<Template, Room>
     {
         private readonly Random rng = new Random();
 
@@ -13,132 +13,135 @@ namespace zeldagen.post30
 
         public int MaxLinearSequenceLength { get; set; } = 8;
 
-        public IRoomClassifier<RoomType> Classifier => new Post30Classifier();
+        public IRoomClassifier<Room> Classifier => new Post30Classifier();
 
-        public Map<TemplateType, RoomType> GenerateMap()
+        public Map<Template, Room> GenerateMap()
         {
-            var map = new Map<TemplateType, RoomType>(TemplateType.DungeonStart);
+            // Track identifiers for key
+            Skid switches = new();
+            Skid keys = new();
+
+            var map = new Map<Template, Room>((l, r) => l.Kind == r.Kind && l.Exit.Count == 1 && r.Entrance.Count == 1 ? Reduction.MergeRightToLeft : Reduction.Keep);
+            map.CreateTemplate(TemplateType.DungeonStart);
 
             int tick = 0;
             bool firstLayout = true;
 
-            while (map.Unfinished.TryDequeue(out var next))
+            foreach (var currentNode in map.RemainingTemplates())
             {
                 // If the map is too big, just finish it out
                 if (tick >= Size)
                 {
-                    if (next.Type == TemplateType.BonusGoal)
+                    if (currentNode.Type == TemplateType.BonusGoal)
                     {
-                        map.Replace(next, map.CreateRoom(ChooseRoom()))
-                            .Connect(map.CreateRoom(RoomType.BonusGoal));
+                        currentNode.ReplaceWith(map.CreateRoom(ChooseRoom()))
+                            .ConnectTo(map.CreateRoom(RoomType.BonusGoal));
                         continue;
                     }
 
-                    if (next.Type != TemplateType.SwitchSeq && next.Type != TemplateType.SwitchLockSeq)
+                    if (currentNode.Type != TemplateType.SwitchSeq && currentNode.Type != TemplateType.SwitchLockSeq)
                     {
                         // don't break switch sequences
-                        map.Replace(next, map.CreateRoom(ChooseRoom()));
+                        currentNode.ReplaceWith(map.CreateRoom(ChooseRoom()));
                         continue;
                     }
                 }
 
-                switch (next.Type)
+                switch (currentNode.Type)
                 {
                     case TemplateType.DungeonStart:
                         var e = map.CreateTemplate(TemplateType.EntranceChain);
-                        map.CreateRoom(RoomType.Entrance).Connect(e);
-                        e.Connect(map.CreateRoom(RoomType.Goal));
+                        map.CreateRoom(RoomType.Entrance).ConnectTo(e);
+                        e.ConnectTo(map.CreateRoom(RoomType.Goal));
                         break;
                     case TemplateType.EntranceChain:
-                        SetUpEntrance(map, ref tick, next);
+                        MapEntrance(map, ref tick, currentNode);
                         break;
                     case TemplateType.RoomChooser:
-                        map.Replace(next, map.CreateRoom(ChooseRoom()));
+                        currentNode.ReplaceWith(map.CreateRoom(ChooseRoom()));
                         break;
                     case TemplateType.LayoutChooser:
-                        ChooseLayout(map, ref tick, firstLayout, next);
+                        ChooseLayout(map, ref tick, firstLayout, currentNode);
                         firstLayout = false;
                         break;
                     case TemplateType.LinearSequence:
-                        if (next.State == 0 || Roll() <= 10)
+                        if (currentNode.State == 0 || Roll() <= 10)
                         {
-                            map.Replace(next, map.CreateTemplate(TemplateType.RoomChooser));
+                            currentNode.ReplaceWith(map.CreateTemplate(TemplateType.RoomChooser));
                         }
                         else
                         {
                             var r = map.CreateTemplate(TemplateType.RoomChooser);
-                            next.SwapRight(r);
-                            next.Connect(r);
-                            map.Unfinished.Enqueue(next); // Repeat linear sequence
+                            currentNode.SwapRight(r);
+                            currentNode.ConnectTo(r);
+                            map.Track(currentNode); // Repeat linear sequence
 
-                            next.State--;
+                            currentNode.State--;
                         }
                         break;
                     case TemplateType.HookSequence:
-                        CreateHook(map, next);
+                        CreateHook(map, currentNode);
                         break;
                     case TemplateType.BonusGoal:
-                        map.Replace(
-                            next,
-                            map.CreateTemplate(TemplateType.LayoutChooser))
-                            .Connect(map.CreateRoom(RoomType.BonusGoal));
+                        currentNode.ReplaceWith(map.CreateTemplate(TemplateType.LayoutChooser))
+                            .ConnectTo(map.CreateRoom(RoomType.BonusGoal));
                         break;
                     case TemplateType.LockChain:
-                        AddLockChain(map, ref tick, next);
+                        AddLockChain(map, ref tick, currentNode, keys);
                         break;
                     case TemplateType.MultiSwitch:
-                        AddSwitchedSection(map, next);
+                        AddSwitchedSection(map, currentNode, switches);
                         break;
                     case TemplateType.SwitchSeq:
-                        AddSwitch(map, ref tick, next);
+                        AddSwitch(map, ref tick, currentNode);
                         break;
                     case TemplateType.SwitchLockSeq:
-                        AddSwitchLockedPath(map, ref tick, next);
+                        AddSwitchLockedPath(map, ref tick, currentNode);
                         break;
                     default:
-                        throw new Exception("Unsupported room type " + next.Type);
+                        throw new Exception("Unsupported room type " + currentNode.Type);
                 }
             }
 
             return map;
         }
 
-        private void SetUpEntrance(Map<TemplateType, RoomType> map, ref int tick, Template<TemplateType> next)
+        private void MapEntrance(Map<Template, Room> map, ref int tick, Template current)
         {
             if (Roll() <= 15) // was 10
             {
-                map.Replace(next, map.CreateTemplate(TemplateType.LayoutChooser));
+                current.ReplaceWith(map.CreateTemplate(TemplateType.LayoutChooser));
             }
             else
             {
                 tick++;
                 // e - L - R - L - ()
                 // () - E /
-                Template<TemplateType> backL = map.CreateTemplate(TemplateType.LayoutChooser);
-                Template<TemplateType> r = map.CreateTemplate(TemplateType.RoomChooser);
-                Template<TemplateType> frontL = map.CreateTemplate(TemplateType.LayoutChooser);
+                Template backL = map.CreateTemplate(TemplateType.LayoutChooser);
+                Template r = map.CreateTemplate(TemplateType.RoomChooser);
+                Template frontL = map.CreateTemplate(TemplateType.LayoutChooser);
 
                 //Splice the back L in at the right side of E, then build up e - L - R chain
-                next.SwapRight(backL);
-                r.Connect(backL);
-                frontL.Connect(r);
-                map.CreateRoom(RoomType.Entrance).Connect(frontL);
-                next.Connect(r);
+                current.SwapRight(backL);
+                r.ConnectTo(backL);
+                frontL.ConnectTo(r);
+                map.CreateRoom(RoomType.Entrance).ConnectTo(frontL);
+                current.ConnectTo(r);
 
-                map.Unfinished.Enqueue(next); // reuse entrance chain
+                map.Track(current); // reuse entrance chain
             }
         }
 
-        private void AddSwitchLockedPath(Map<TemplateType, RoomType> map, ref int tick, Template<TemplateType> next)
+        private void AddSwitchLockedPath(Map<Template, Room> map, ref int tick, Template current)
         {
             if (Roll() <= 10)
             {
                 var left = map.CreateTemplate(TemplateType.LayoutChooser);
                 var right = map.CreateTemplate(TemplateType.LayoutChooser);
 
-                next.SwapLeft(left);
-                left.Connect(right).State = next.State;
-                next.SwapRight(right);
+                current.SwapLeft(left);
+                left.ConnectTo(right).Lock = new Switch(current.State);
+                current.SwapRight(right);
             }
             else
             {
@@ -147,53 +150,51 @@ namespace zeldagen.post30
                 var left = map.CreateTemplate(TemplateType.LayoutChooser);
                 var right = map.CreateTemplate(TemplateType.LayoutChooser);
 
-                next.SwapLeft(r);
-                r.Connect(left);
-                left.Connect(right).State = next.State;
-                next.SwapRight(right);
+                current.SwapLeft(r);
+                r.ConnectTo(left);
+                left.ConnectTo(right).Lock = new Switch(current.State);
+                current.SwapRight(right);
 
                 //create sub-switch lock branch
-                r.Connect(next);
-                next.Connect(map.CreateTemplate(TemplateType.BonusGoal));
-                map.Unfinished.Enqueue(next); // reuse SWL template
+                r.ConnectTo(current);
+                current.ConnectTo(map.CreateTemplate(TemplateType.BonusGoal));
+                map.Track(current); // reuse SWL template
             }
         }
 
-        private void AddSwitch(Map<TemplateType, RoomType> map, ref int tick, Template<TemplateType> next)
+        private void AddSwitch(Map<Template, Room> map, ref int tick, Template current)
         {
             if (Roll() <= 10)
             {
-                map.Replace(
-                    next,
-                    map.CreateTemplate(TemplateType.LayoutChooser))
-                    .Connect(map.CreateRoom(RoomType.Switch, next.State));
+                current.ReplaceWith(map.CreateTemplate(TemplateType.LayoutChooser))
+                    .ConnectTo(map.CreateRoom(RoomType.Switch, current.State));
             }
             else
             {
                 tick++;
                 // R - L - switch
                 //   \ SW
-                Template<TemplateType> r = map.CreateTemplate(TemplateType.RoomChooser);
-                Template<TemplateType> l = map.CreateTemplate(TemplateType.LayoutChooser);
+                Template r = map.CreateTemplate(TemplateType.RoomChooser);
+                Template l = map.CreateTemplate(TemplateType.LayoutChooser);
 
-                next.SwapLeft(r);
-                r.Connect(next);
-                r.Connect(l);
-                l.Connect(map.CreateRoom(RoomType.Switch, next.State));
+                current.SwapLeft(r);
+                r.ConnectTo(current);
+                r.ConnectTo(l);
+                l.ConnectTo(map.CreateRoom(RoomType.Switch, current.State));
 
-                map.Unfinished.Enqueue(next); // reuse switch sequence
+                map.Track(current); // reuse switch sequence
             }
         }
 
-        private void AddSwitchedSection(Map<TemplateType, RoomType> map, Template<TemplateType> next)
+        private void AddSwitchedSection(Map<Template, Room> map, Template current, Skid switches)
         {
-            int state = map.Switch();
+            int state = switches.Next();
 
-            var r = map.Replace(next, map.CreateTemplate(TemplateType.RoomChooser));
+            var r = current.ReplaceWith(map.CreateTemplate(TemplateType.RoomChooser));
 
-            foreach (var hall in r.Exit) hall.State = state; // seal the normal exits
+            foreach (var hall in r.Exit) hall.Lock = new Switch(state); // seal the normal exits
 
-            r.Connect(map.CreateTemplate(TemplateType.SwitchSeq, state));
+            r.ConnectTo(map.CreateTemplate(TemplateType.SwitchSeq, state));
 
             if (Roll() > 10)
             {
@@ -201,12 +202,12 @@ namespace zeldagen.post30
                 var sl = map.CreateTemplate(TemplateType.SwitchLockSeq, state);
                 var gb = map.CreateTemplate(TemplateType.BonusGoal);
 
-                r.Connect(sl);
-                sl.Connect(gb);
+                r.ConnectTo(sl);
+                sl.ConnectTo(gb);
             }
         }
 
-        private void AddLockChain(Map<TemplateType, RoomType> map, ref int tick, Template<TemplateType> next)
+        private void AddLockChain(Map<Template, Room> map, ref int tick, Template current, Skid keys)
         {
             if (Roll() <= 10)
             {
@@ -216,12 +217,12 @@ namespace zeldagen.post30
                 var keyL = map.CreateTemplate(TemplateType.LayoutChooser);
                 var lockedL = map.CreateTemplate(TemplateType.LayoutChooser);
 
-                int key = map.Key();
-                next.SwapLeft(r);
-                r.Connect(keyL);
-                r.Connect(lockedL).Key = key;
-                keyL.Connect(map.CreateRoom(RoomType.Key, key));
-                next.SwapRight(lockedL);
+                int key = keys.Next();
+                current.SwapLeft(r);
+                r.ConnectTo(keyL);
+                r.ConnectTo(lockedL).Lock = new Key(key);
+                keyL.ConnectTo(map.CreateRoom(RoomType.Key, key));
+                current.SwapRight(lockedL);
             }
             else
             {
@@ -232,26 +233,23 @@ namespace zeldagen.post30
                 var newK = map.CreateTemplate(TemplateType.LockChain);
                 var gb = map.CreateTemplate(TemplateType.BonusGoal);
 
-                next.SwapLeft(r);
-                r.Connect(next);
-                r.Connect(newK);
-                newK.Connect(gb);
+                current.SwapLeft(r);
+                r.ConnectTo(current);
+                r.ConnectTo(newK);
+                newK.ConnectTo(gb);
 
-                map.Unfinished.Enqueue(next); // Reuse key sequence
+                map.Track(current); // Reuse key sequence
             }
         }
 
-        private void CreateHook(Map<TemplateType, RoomType> map, Template<TemplateType> next)
+        private void CreateHook(Map<Template, Room> map, Template current)
         {
-            var r = map.CreateTemplate(TemplateType.RoomChooser);
-            map.Replace(next, r);
-
-            //add bonus goal
-            var gb = map.CreateTemplate(TemplateType.BonusGoal);
-            r.Connect(gb).Secret = (Roll() > 10);
+            current.ReplaceWith(map.CreateTemplate(TemplateType.RoomChooser))
+                .ConnectTo(map.CreateTemplate(TemplateType.BonusGoal))
+                .Lock = (Roll() > 10 ? new Secret() : null);
         }
 
-        private void ChooseLayout(Map<TemplateType, RoomType> map, ref int tick, bool firstLayout, Template<TemplateType> next)
+        private void ChooseLayout(Map<Template, Room> map, ref int tick, bool firstLayout, Template current)
         {
             int roll = Roll();
             if (firstLayout)
@@ -276,21 +274,21 @@ namespace zeldagen.post30
             {
                 case 1:
                 case 2:
-                    map.Replace(next, map.CreateTemplate(TemplateType.HookSequence));
+                    current.ReplaceWith(map.CreateTemplate(TemplateType.HookSequence));
                     break;
                 case 3:
                 case 4:
                 case 5:
-                    map.Replace(next, map.CreateTemplate(TemplateType.LockChain));
+                    current.ReplaceWith(map.CreateTemplate(TemplateType.LockChain));
                     break;
                 case 6:
                 case 7:
                 case 8:
-                    map.Replace(next, map.CreateTemplate(TemplateType.MultiSwitch));
+                    current.ReplaceWith(map.CreateTemplate(TemplateType.MultiSwitch));
                     break;
                 case 9:
                 case 10:
-                    map.Replace(next, map.CreateTemplate(TemplateType.LinearSequence, MaxLinearSequenceLength));
+                    current.ReplaceWith(map.CreateTemplate(TemplateType.LinearSequence, MaxLinearSequenceLength));
                     break;
                 case 11:
                 case 12:
@@ -299,10 +297,10 @@ namespace zeldagen.post30
                     var frontL = map.CreateTemplate(TemplateType.LayoutChooser);
                     var r = map.CreateTemplate(TemplateType.RoomChooser);
                     var backL = map.CreateTemplate(TemplateType.LayoutChooser);
-                    next.SwapLeft(frontL);
-                    frontL.Connect(r);
-                    r.Connect(backL);
-                    next.SwapRight(backL);
+                    current.SwapLeft(frontL);
+                    frontL.ConnectTo(r);
+                    r.ConnectTo(backL);
+                    current.SwapRight(backL);
                     break;
                 default:
                     tick++;
@@ -311,12 +309,12 @@ namespace zeldagen.post30
                     var topL = map.CreateTemplate(TemplateType.LayoutChooser);
                     var bottomL = map.CreateTemplate(TemplateType.LayoutChooser);
 
-                    next.SwapLeft(frontR);
-                    frontR.Connect(topL, roll < 18 ? Direction.Forward : Direction.Both);
-                    frontR.Connect(bottomL, roll == 16 || roll == 17 ? Direction.Back : Direction.Both);
-                    topL.Connect(backR);
-                    bottomL.Connect(backR);
-                    next.SwapRight(backR);
+                    current.SwapLeft(frontR);
+                    frontR.ConnectTo(topL, roll < 18 ? Direction.Forward : Direction.Both);
+                    frontR.ConnectTo(bottomL, roll == 16 || roll == 17 ? Direction.Back : Direction.Both);
+                    topL.ConnectTo(backR);
+                    bottomL.ConnectTo(backR);
+                    current.SwapRight(backR);
                     break;
             }
         }
@@ -331,5 +329,12 @@ namespace zeldagen.post30
             int i when i > 14 && i <= 17 => RoomType.Puzzle,
             _ => RoomType.Challenge
         };
+    }
+
+    public static class MapHelper
+    {
+        public static Template CreateTemplate(this Map<Template, Room> map, TemplateType type, int state = 0) => map.Track(new Template(type, state));
+
+        public static Room CreateRoom(this Map<Template, Room> map, RoomType type, int keySwitch = 0) => map.Track(new Room(type, keySwitch));
     }
 }

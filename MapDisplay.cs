@@ -4,24 +4,26 @@ namespace zeldagen
 {
     public interface IMapDisplay
     {
-        void Print<T, R>(Map<T, R> map, IRoomClassifier<R> classifier);
+        void Print<T, R>(Map<T, R> map, IRoomClassifier<R> classifier) where T : TemplateBase where R : RoomBase;
     }
 
     public enum RoomCategory
     {
         Entrance,
         Goal,
+        Battle,
+        BossBattle,
         Normal
     }
 
-    public interface IRoomClassifier<R>
+    public interface IRoomClassifier<R> where R : RoomBase
     {
-        RoomCategory Classify(Room<R> room);
+        RoomCategory Classify(R room);
     }
 
     public class GraphvizMapDisplay : IMapDisplay
     {
-        public void Print<T, R>(Map<T, R> map, IRoomClassifier<R> classifier)
+        public void Print<T, R>(Map<T, R> map, IRoomClassifier<R> classifier) where T : TemplateBase where R : RoomBase
         {
             Console.WriteLine("strict digraph dungeon {");
 
@@ -35,6 +37,12 @@ namespace zeldagen
                         break;
                     case RoomCategory.Goal:
                         Console.WriteLine($"{room.Id} [label=\"{room.ToString()}\",peripheries=2]");
+                        break;
+                    case RoomCategory.Battle:
+                        Console.WriteLine($"{room.Id} [label=\"{room.ToString()}\",shape=octagon]");
+                        break;
+                    case RoomCategory.BossBattle:
+                        Console.WriteLine($"{room.Id} [label=\"{room.ToString()}\",shape=doubleoctagon]");
                         break;
                     default:
                         Console.WriteLine($"{room.Id} [label=\"{room.ToString()}\"]");
@@ -70,13 +78,7 @@ namespace zeldagen
 
             Console.WriteLine("}");
 
-            string Label(Hall hall)
-            {
-                if (hall.Secret) return "label = \"?\"";
-                if (hall.Key.HasValue) return $"label = \"k{hall.Key}\"";
-                if (hall.State.HasValue) return $"label = \"s{hall.State}\"";
-                return null;
-            }
+            string Label(Hall hall) => hall.Lock is null ? null : $"label = \"{hall.Lock}\"";
         }
     }
 }

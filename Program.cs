@@ -6,7 +6,7 @@ namespace zeldagen
     {
         static void Main(string[] args)
         {
-            var grammar = new post30.Post30Grammar();
+            var grammar = new post24.Post24Grammar();
 
             Console.WriteLine("Generating map...");
             var map = grammar.GenerateMap();

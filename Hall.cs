@@ -9,11 +9,7 @@ namespace zeldagen
 
         public Direction Direction { get; set; }
 
-        public bool Secret { get; set; }
-
-        public int? Key { get; set; }
-
-        public int? State { get; set; }
+        public Lock Lock { get; set; }
     }
 
     public enum Direction

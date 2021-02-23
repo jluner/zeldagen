@@ -1,16 +1,11 @@
 namespace zeldagen
 {
-    public class Template<T> : Layout
+    public abstract class TemplateBase : Layout
     {
         private static int _counter;
 
-        public Template(T type, int state) : base(_counter++)
+        protected TemplateBase() : base(_counter++)
         {
-            Type = type;
-            State = state;
         }
-
-        public T Type { get; }
-        public int State { get; set; }
     }
 }

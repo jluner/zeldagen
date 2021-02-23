@@ -5,81 +5,110 @@ using System.Linq;
 namespace zeldagen
 {
     public class Map<T, R>
+        where T : TemplateBase
+        where R : RoomBase
     {
-        private int key = 1;
-        private int state = 1;
+        private Func<R, R, Reduction> _reducible;
 
-        public Map(T initial)
+        public List<R> Rooms { get; } = new List<R>();
+
+        public Queue<T> _unfinished = new Queue<T>();
+
+        public Map(Func<R, R, Reduction> reducible)
         {
-            CreateTemplate(initial);
+            _reducible = reducible;
         }
-
-        public List<Room<R>> Rooms { get; } = new List<Room<R>>();
-
-        public Queue<Template<T>> Unfinished { get; } = new Queue<Template<T>>();
 
         public IEnumerable<Hall> Halls => Rooms.SelectMany(r => r.Exit);
 
-        public int Key() => key++;
-
-        public int Switch() => state++;
-
-        public Room<R> CreateRoom(R type, int keySwitch = 0)
+        public IEnumerable<T> RemainingTemplates()
         {
-            Room<R> r = new Room<R>(type, keySwitch);
-            Rooms.Add(r);
-            return r;
+            // This is a particularly nasty twist as we can now iterate over a mutating collection
+            while (_unfinished.TryDequeue(out var t)) yield return t;
         }
 
-        public Template<T> CreateTemplate(T type, int state = 0)
+        public T Track(T template)
         {
-            Template<T> t = new Template<T>(type, state);
-            Unfinished.Enqueue(t);
-            return t;
+            _unfinished.Enqueue(template);
+            return template;
         }
 
-        public Layout Replace(Layout old, Layout @new)
+        public R Track(R room)
         {
-            old.SwapLeft(@new);
-            old.SwapRight(@new);
-            return @new;
+            Rooms.Add(room);
+            return room;
         }
 
         public void Reduce()
         {
-            var halls = Halls.Where(r => r.Direction == Direction.Both && !r.Secret && !r.Key.HasValue && !r.State.HasValue).ToList(); // get all hallways
+            var halls = Halls.Where(r => r.Direction == Direction.Both && r.Lock is null).ToList(); // get all hallways
 
             foreach (var hall in halls)
             {
-                Room<R> left = (Room<R>)hall.From;
-                Room<R> right = (Room<R>)hall.To;
-                if (left.Kind.Equals(right.Kind) && left.Exit.Count == 1 && right.Entrance.Count == 1)
+                R left = (R)hall.From;
+                R right = (R)hall.To;
+
+                switch (_reducible(left, right))
                 {
-                    Console.WriteLine($"Merging room {right} into {left}");
-                    //combine rooms:
-                    // 1. remove this hallway
-                    // 2. take the right room's left hallways
-                    // 2a. have them point to the left room
-                    // 2b. add them into the left room's set of entry hallways
-                    // 3. repeat with right hallways
+                    case Reduction.MergeRightToLeft:
+                        Console.WriteLine($"Merging room {right} into {left}");
+                        //combine rooms:
+                        // 1. remove this hallway
+                        // 2. take the right room's left hallways
+                        // 2a. have them point to the left room
+                        // 2b. add them into the left room's set of entry hallways
+                        // 3. repeat with right hallways
 
-                    //   _______  ________
-                    //   |     |  |      |
-                    //  =   L  ====  R    =
-                    //   |_____|  |______|
-                    //
-                    left.Exit.Remove(hall);
-                    right.Entrance.Remove(hall);
+                        //   _______  ________
+                        //   |     |  |      |
+                        //  =   L  ====  R    =
+                        //   |_____|  |______|
+                        //
+                        left.Exit.Remove(hall);
+                        right.Entrance.Remove(hall);
 
-                    foreach (var otherHall in right.Entrance) otherHall.To = left;
-                    left.Entrance.AddRange(right.Entrance);
+                        foreach (var otherHall in right.Entrance) otherHall.To = left;
+                        left.Entrance.AddRange(right.Entrance);
 
-                    foreach (var otherHall in right.Exit) otherHall.From = left;
-                    left.Exit.AddRange(right.Exit);
+                        foreach (var otherHall in right.Exit) otherHall.From = left;
+                        left.Exit.AddRange(right.Exit);
 
-                    Rooms.Remove(right);
+                        Rooms.Remove(right);
+                        break;
+                    case Reduction.MergeLeftToRight:
+                        Console.WriteLine($"Merging room {left} into {right}");
+                        //combine rooms:
+                        // 1. remove this hallway
+                        // 2. take the right room's left hallways
+                        // 2a. have them point to the left room
+                        // 2b. add them into the left room's set of entry hallways
+                        // 3. repeat with right hallways
+
+                        //   _______  ________
+                        //   |     |  |      |
+                        //  =   L  ====  R    =
+                        //   |_____|  |______|
+                        //
+                        left.Exit.Remove(hall);
+                        right.Entrance.Remove(hall);
+
+                        foreach (var otherHall in left.Entrance) otherHall.To = right;
+                        right.Entrance.AddRange(left.Entrance);
+
+                        foreach (var otherHall in left.Exit) otherHall.From = right;
+                        right.Exit.AddRange(left.Exit);
+
+                        Rooms.Remove(left);
+                        break;
                 }
             }
         }
+    }
+
+    public enum Reduction
+    {
+        Keep,
+        MergeRightToLeft,
+        MergeLeftToRight
     }
 }
