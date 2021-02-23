@@ -12,6 +12,16 @@ namespace zeldagen.post24
 
         public Item Item { get; }
 
-        public override string ToString() => Item is null ? $"{Kind} ({Id})" : $"[{Item}] ({Id})";
+        public override string ToString() => Kind switch
+        {
+            RoomType.Start => "s",
+            RoomType.EndBoss => "eb",
+            RoomType.Goal => "g",
+            RoomType.MiniBoss => "em",
+            RoomType.Enemy => "e",
+            RoomType.Empty => "n",
+            RoomType.Puzzle => "p",
+            _ => Item.ToString()
+        };
     }
 }

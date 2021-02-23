@@ -15,7 +15,7 @@ namespace zeldagen.post24
             Map<Template, Room> map = new(MapReducible);
             map.CreateTemplate(TemplateType.DungeonStart);
 
-            foreach (var current in map.RemainingTemplates().Take(75))
+            foreach (var current in map.RemainingTemplates())
             {
                 switch (current.Type)
                 {
@@ -73,21 +73,7 @@ namespace zeldagen.post24
                         MapSwitchLockChain(switches, map, current);
                         break;
                     case TemplateType.MM2_SwitchLockChain:
-                        ToggleSwitch orig = (ToggleSwitch)current.Item;
-                        ToggleSwitch toggled = orig.Toggle();
-                        var lockEntry = map.CreateTemplate(TemplateType.SWL_SwitchLockSequence, orig);
-                        var lockExit = map.CreateTemplate(TemplateType.SWL_SwitchLockSequence, toggled);
-                        var newSwitch = map.CreateTemplate(TemplateType.SW_SwitchSequence, orig);
-                        current.SwapLeft(lockEntry);
-                        current.SwapRight(lockExit);
-                        lockEntry.ConnectTo(newSwitch);
-                        lockEntry.ConnectTo(lockExit);
-                        if (Roll() <= 10)
-                        {
-                            var subBranch = map.CreateTemplate(TemplateType.MM2_SwitchLockChain, toggled);
-                            lockEntry.ConnectTo(subBranch);
-                            subBranch.ConnectTo(map.CreateTemplate(TemplateType.GB_BonusGoal));
-                        }
+                        MapExtraSwitchLocks(map, current);
                         break;
                     case TemplateType.MS_MultiSwitchSequence:
                         MapMultiSwitchSequence(switches, map, current);
@@ -218,30 +204,34 @@ namespace zeldagen.post24
 
         private void MapUniqueItem(Map<Template, Room> map, Template current)
         {
-            // TODO figure out how to eliminate this room per grammar?
-            var start = map.CreateRoom(RoomType.Empty);
+            // () <-> C/S() <-> em <-> item
+            //   ^---------------------/
             var main = map.CreateTemplate(
-                !map.Cap() && Roll() <= 10 ? TemplateType.C_Chain : TemplateType.S_LinearSequence);
+                !map.Cap() && Roll() <= 10
+                    ? TemplateType.C_Chain
+                    : TemplateType.S_LinearSequence);
             var miniboss = map.CreateRoom(RoomType.MiniBoss);
             var item = map.CreateRoom(RoomType.Item, current.Item);
-            current.SwapLeft(start);
-            start.ConnectTo(main);
+
+            current.SwapLeft(main);
             main.ConnectTo(miniboss);
             miniboss.ConnectTo(item);
-            start.ConnectTo(item, Direction.Back);
+
+            main.Entrance.First().From.ConnectTo(item, Direction.Back);
         }
 
         private void MapManyItemsSequence(Map<Template, Room> map, Template current)
         {
-            // TODO figure out how to eliminate this room per grammar?
-            var start = map.CreateRoom(RoomType.Empty);
+            // () <-> C/S() <-> item
+            //   ^-------------/
             var main = map.CreateTemplate(
-                !map.Cap() && Roll() <= 10 ? TemplateType.C_Chain : TemplateType.S_LinearSequence);
+                !map.Cap() && Roll() <= 10
+                    ? TemplateType.C_Chain
+                    : TemplateType.S_LinearSequence);
             var item = map.CreateRoom(RoomType.Item, current.Item);
-            current.SwapLeft(start);
-            start.ConnectTo(main);
+            current.SwapLeft(main);
             main.ConnectTo(item);
-            start.ConnectTo(item, Direction.Back);
+            main.Entrance.First().From.ConnectTo(item, Direction.Back);
         }
 
         private void MapManyLockSequence(Map<Template, Room> map, Template current)
@@ -329,14 +319,17 @@ namespace zeldagen.post24
 
         private void MapSwitchSequence(Map<Template, Room> map, Template current)
         {
-            var start = map.CreateRoom(RoomType.Empty);
-            var main = map.CreateTemplate(!map.Cap() && Roll() <= 10 ? TemplateType.C_Chain : TemplateType.S_LinearSequence);
+            // () <-> C/S() <-> switch
+            //   ^-------------/
+            var main = map.CreateTemplate(
+                !map.Cap() && Roll() <= 10
+                    ? TemplateType.C_Chain
+                    : TemplateType.S_LinearSequence);
             var switchRoom = map.CreateRoom(RoomType.Item, current.Item); // This is the switch
 
-            current.SwapLeft(start);
-            start.ConnectTo(main);
+            current.SwapLeft(main);
             main.ConnectTo(switchRoom);
-            start.ConnectTo(switchRoom, Direction.Back);
+            main.Entrance.First().From.ConnectTo(switchRoom, Direction.Back);
         }
 
         private static void MapMultiSwitchSequence(Skid switches, Map<Template, Room> map, Template current)
@@ -377,16 +370,37 @@ namespace zeldagen.post24
             }
         }
 
+        private void MapExtraSwitchLocks(Map<Template, Room> map, Template current)
+        {
+            ToggleSwitch orig = (ToggleSwitch)current.Item;
+            ToggleSwitch toggled = orig.Toggle();
+            var lockEntry = map.CreateTemplate(TemplateType.SWL_SwitchLockSequence, orig);
+            var lockExit = map.CreateTemplate(TemplateType.SWL_SwitchLockSequence, toggled);
+            var newSwitch = map.CreateTemplate(TemplateType.SW_SwitchSequence, orig);
+            current.SwapLeft(lockEntry);
+            current.SwapRight(lockExit);
+            lockEntry.ConnectTo(newSwitch);
+            lockEntry.ConnectTo(lockExit);
+            if (Roll() <= 10)
+            {
+                var subBranch = map.CreateTemplate(TemplateType.MM2_SwitchLockChain, toggled);
+                lockEntry.ConnectTo(subBranch);
+                subBranch.ConnectTo(map.CreateTemplate(TemplateType.GB_BonusGoal));
+            }
+        }
+
         private static Reduction MapReducible(Room left, Room right)
         {
             // Simple: hallway shrinking
             if (left.Exit.Count == 1 && right.Entrance.Count == 1)
             {
                 if (left.Kind == right.Kind) return Reduction.MergeRightToLeft;
-                if (left.Kind == RoomType.Empty) return Reduction.MergeLeftToRight;
-                if (right.Kind == RoomType.Empty) return Reduction.MergeRightToLeft;
+                if (AllowEmptyMerge(left, right)) return Reduction.MergeLeftToRight;
+                if (AllowEmptyMerge(right, left)) return Reduction.MergeRightToLeft;
             }
             return Reduction.Keep;
+
+            bool AllowEmptyMerge(Room empty, Room other) => empty.Kind == RoomType.Empty && (other.Kind == RoomType.Puzzle || other.Kind == RoomType.Enemy);
         }
 
         private int Roll() => rng.Next(1, 21);
