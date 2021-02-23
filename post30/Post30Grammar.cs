@@ -6,9 +6,6 @@ namespace zeldagen.post30
     {
         private readonly Random rng = new Random();
 
-        // Note on use of Size:
-        // Size = 10 averages around 40 rooms in the final dungeon
-        // Size = 12 averages around 60
         public int Size { get; set; } = 8;
 
         public int MaxLinearSequenceLength { get; set; } = 8;
@@ -333,8 +330,18 @@ namespace zeldagen.post30
 
     public static class MapHelper
     {
-        public static Template CreateTemplate(this Map<Template, Room> map, TemplateType type, int state = 0) => map.Track(new Template(type, state));
+        public static Template CreateTemplate(this Map<Template, Room> map, TemplateType type, int state = 0)
+        {
+            Template t = new(type, state);
+            map.Track(t);
+            return t;
+        }
 
-        public static Room CreateRoom(this Map<Template, Room> map, RoomType type, int keySwitch = 0) => map.Track(new Room(type, keySwitch));
+        public static Room CreateRoom(this Map<Template, Room> map, RoomType type, int keySwitch = 0)
+        {
+            Room r = new(type, keySwitch);
+            map.Track(r);
+            return r;
+        }
     }
 }

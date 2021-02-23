@@ -12,7 +12,7 @@ namespace zeldagen
 
         public List<R> Rooms { get; } = new List<R>();
 
-        public Queue<T> _unfinished = new Queue<T>();
+        private Queue<T> _unfinished = new Queue<T>();
 
         public Map(Func<R, R, Reduction> reducible)
         {
@@ -27,16 +27,14 @@ namespace zeldagen
             while (_unfinished.TryDequeue(out var t)) yield return t;
         }
 
-        public T Track(T template)
+        public void Track(T template)
         {
             _unfinished.Enqueue(template);
-            return template;
         }
 
-        public R Track(R room)
+        public void Track(R room)
         {
             Rooms.Add(room);
-            return room;
         }
 
         public void Reduce()
